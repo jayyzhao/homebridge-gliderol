@@ -1,7 +1,7 @@
 {
   "displayName": "Homebridge Gliderol",
   "name": "homebridge-gliderol",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "A Homebridge Plugin for Gliderol Garage Doors",
   "license": "Apache-2.0",
   "type": "module",
