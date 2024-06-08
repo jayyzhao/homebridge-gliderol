@@ -69,9 +69,14 @@ export class HomebridgeGliderolAccessory {
   }
 
   async updateFinalState(homekit_state: number){
-    new Promise(resolve => setTimeout(resolve, 15000));
+    this.platform.log.info("Starting Closing timer")
+    await new Promise(resolve => setTimeout(resolve, 15000));
+    this.platform.log.info("Stopped Closing timer")
+    this.saveStateForId(this.accessory.UUID, homekit_state);
     this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, homekit_state);
+    this.platform.log.info("Final State Updated")
   }
+
   async handleTargetDoorStateSet(value: any) {
     this.platform.log.info('Triggered Set TargetDoorState - ' + {value});
 
@@ -83,8 +88,7 @@ export class HomebridgeGliderolAccessory {
       //OPEN = 1     OPEN = 0
       //CLOSED = 0   CLOSED = 1
       if(await this.commandGliderol(1)){
-        this.saveStateForId(this.accessory.UUID, 0);
-        this.updateFinalState(0)
+        this.updateFinalState(0);
       } else{
         this.saveStateForId(this.accessory.UUID, 1);
         this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, this.platform.Characteristic.CurrentDoorState.CLOSED);
@@ -94,8 +98,7 @@ export class HomebridgeGliderolAccessory {
       this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, this.platform.Characteristic.CurrentDoorState.CLOSING);
       //Gliderol State 0 is Closed. Homekit State 1 is Closed.
       if(await this.commandGliderol(0)){
-        this.saveStateForId(this.accessory.UUID, 1);
-        this.updateFinalState(1)
+        this.updateFinalState(1);
 
       } else{
         this.saveStateForId(this.accessory.UUID, 0);
