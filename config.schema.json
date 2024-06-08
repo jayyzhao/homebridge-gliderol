@@ -1,16 +1,18 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
+  "pluginAlias": "HomebridgeGliderol",
   "pluginType": "platform",
   "singular": true,
   "schema": {
     "type": "object",
     "properties": {
-      "name": {
-        "title": "Name",
-        "type": "string",
-        "required": true,
-        "default": "Example Dynamic Platform"
-      }
-    }
-  }
+      "base_url": { "type": "string" },
+      "mobile_number": { "type": "string" }
+    },
+    "required": [ "base_url" ]
+  },
+  "layout": [
+    { "key": "base_url", "title": "Base URL", "placeholder": "https://n0ugozxnae.execute-api.ap-northeast-1.amazonaws.com/" },
+    { "key": "mobile_number", "title": "Mobile Number", "placeholder": "+610400000000" },
+    { "key": "api_key", "title": "API Key", "placeholder": "+61400000000" }
+  ]
 }

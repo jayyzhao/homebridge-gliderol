@@ -1,17 +1,16 @@
 {
-  "private": true,
-  "displayName": "Plugin Name",
-  "name": "homebridge-plugin-name",
+  "displayName": "Homebridge Gliderol",
+  "name": "homebridge-gliderol",
   "version": "1.0.0",
-  "description": "A short description about what your plugin does.",
+  "description": "A Homebridge Plugin for Gliderol Garage Doors",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/USERNAME/GITHUB_PROJECT_NAME.git"
+    "url": "git+https://github.com/jayyzhao/homebridge-gliderol.git"
   },
   "bugs": {
-    "url": "https://github.com/USERNAME/GITHUB_PROJECT_NAME/issues"
+    "url": "https://github.com/jayyzhao/homebridge-gliderol/issues"
   },
   "engines": {
     "node": "^18.17.0 || ^20.9.0",
@@ -25,7 +24,11 @@
     "prepublishOnly": "npm run lint && npm run build"
   },
   "keywords": [
-    "homebridge-plugin"
+    "homebridge-plugin",
+    "homebridge-gliderol",
+    "gliderol",
+    "gliderole-garage-door",
+    "garage-door"
   ],
   "devDependencies": {
     "@types/node": "^20.12.13",
@@ -37,5 +40,8 @@
     "rimraf": "^5.0.7",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "axios": "^1.7.2"
   }
 }

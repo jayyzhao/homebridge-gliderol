@@ -1,6 +1,9 @@
 # Ignore compiled code
 dist
 
+# Ingnore local state
+files
+files/*
 # ------------- Defaults ------------- #
 
 # Logs

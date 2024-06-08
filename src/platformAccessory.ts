@@ -1,141 +1,217 @@
 import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
 
-import { ExampleHomebridgePlatform } from './platform.js';
+import { HomebridgeGliderol } from './platform.js';
+
+import * as fs from 'fs';
+
+import axios, { AxiosResponse, AxiosRequestConfig, RawAxiosRequestHeaders } from 'axios';
 
 /**
  * Platform Accessory
  * An instance of this class is created for each accessory your platform registers
  * Each accessory may expose multiple services of different service types.
  */
-export class ExamplePlatformAccessory {
+export class HomebridgeGliderolAccessory {
   private service: Service;
 
   /**
    * These are just used to create a working example
    * You should implement your own code to track the state of your accessory
    */
-  private exampleStates = {
-    On: false,
-    Brightness: 100,
-  };
+
+  private filePath = 'files/states.txt'
 
   constructor(
-    private readonly platform: ExampleHomebridgePlatform,
+    private readonly platform: HomebridgeGliderol,
     private readonly accessory: PlatformAccessory,
   ) {
 
     // set accessory information
     this.accessory.getService(this.platform.Service.AccessoryInformation)!
-      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Default-Manufacturer')
-      .setCharacteristic(this.platform.Characteristic.Model, 'Default-Model')
-      .setCharacteristic(this.platform.Characteristic.SerialNumber, 'Default-Serial');
+      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Gliderol')
+      .setCharacteristic(this.platform.Characteristic.Model, accessory.context.device.outletType)
+      .setCharacteristic(this.platform.Characteristic.SerialNumber, accessory.context.device.id);
 
-    // get the LightBulb service if it exists, otherwise create a new LightBulb service
-    // you can create multiple services for each accessory
-    this.service = this.accessory.getService(this.platform.Service.Lightbulb) || this.accessory.addService(this.platform.Service.Lightbulb);
+    this.service = this.accessory.getService(this.platform.Service.GarageDoorOpener) || this.accessory.addService(this.platform.Service.GarageDoorOpener);
 
-    // set the service name, this is what is displayed as the default name on the Home app
-    // in this example we are using the name we stored in the `accessory.context` in the `discoverDevices` method.
-    this.service.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.exampleDisplayName);
+    this.service.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name);
+    
+    const currentState = this.loadStateForId(accessory.UUID);
+    this.platform.log(`Loading the cached state for ${accessory.UUID} - State ${currentState}`)
 
-    // each service must implement at-minimum the "required characteristics" for the given service type
-    // see https://developers.homebridge.io/#/service/Lightbulb
 
-    // register handlers for the On/Off Characteristic
-    this.service.getCharacteristic(this.platform.Characteristic.On)
-      .onSet(this.setOn.bind(this))                // SET - bind to the `setOn` method below
-      .onGet(this.getOn.bind(this));               // GET - bind to the `getOn` method below
+    this.service.getCharacteristic(this.platform.Characteristic.CurrentDoorState)
+      .onGet(this.handleCurrentDoorStateGet.bind(this));
+    
+    this.service.getCharacteristic(this.platform.Characteristic.TargetDoorState)
+      .onGet(this.handleTargetDoorStateGet.bind(this))
+      .onSet(this.handleTargetDoorStateSet.bind(this));
 
-    // register handlers for the Brightness Characteristic
-    this.service.getCharacteristic(this.platform.Characteristic.Brightness)
-      .onSet(this.setBrightness.bind(this));       // SET - bind to the 'setBrightness` method below
+    this.service.getCharacteristic(this.platform.Characteristic.ObstructionDetected)
+      .onGet(this.handleObstructionDetectedGet.bind(this));
 
-    /**
-     * Creating multiple services of the same type.
-     *
-     * To avoid "Cannot add a Service with the same UUID another Service without also defining a unique 'subtype' property." error,
-     * when creating multiple services of the same type, you need to use the following syntax to specify a name and subtype id:
-     * this.accessory.getService('NAME') || this.accessory.addService(this.platform.Service.Lightbulb, 'NAME', 'USER_DEFINED_SUBTYPE_ID');
-     *
-     * The USER_DEFINED_SUBTYPE must be unique to the platform accessory (if you platform exposes multiple accessories, each accessory
-     * can use the same subtype id.)
-     */
-
-    // Example: add two "motion sensor" services to the accessory
-    const motionSensorOneService = this.accessory.getService('Motion Sensor One Name') ||
-      this.accessory.addService(this.platform.Service.MotionSensor, 'Motion Sensor One Name', 'YourUniqueIdentifier-1');
-
-    const motionSensorTwoService = this.accessory.getService('Motion Sensor Two Name') ||
-      this.accessory.addService(this.platform.Service.MotionSensor, 'Motion Sensor Two Name', 'YourUniqueIdentifier-2');
-
-    /**
-     * Updating characteristics values asynchronously.
-     *
-     * Example showing how to update the state of a Characteristic asynchronously instead
-     * of using the `on('get')` handlers.
-     * Here we change update the motion sensor trigger states on and off every 10 seconds
-     * the `updateCharacteristic` method.
-     *
-     */
-    let motionDetected = false;
-    setInterval(() => {
-      // EXAMPLE - inverse the trigger
-      motionDetected = !motionDetected;
-
-      // push the new value to HomeKit
-      motionSensorOneService.updateCharacteristic(this.platform.Characteristic.MotionDetected, motionDetected);
-      motionSensorTwoService.updateCharacteristic(this.platform.Characteristic.MotionDetected, !motionDetected);
-
-      this.platform.log.debug('Triggering motionSensorOneService:', motionDetected);
-      this.platform.log.debug('Triggering motionSensorTwoService:', !motionDetected);
-    }, 10000);
   }
 
-  /**
-   * Handle "SET" requests from HomeKit
-   * These are sent when the user changes the state of an accessory, for example, turning on a Light bulb.
-   */
-  async setOn(value: CharacteristicValue) {
-    // implement your own code to turn your device on/off
-    this.exampleStates.On = value as boolean;
+  handleCurrentDoorStateGet() {
+    this.platform.log.debug('Triggered GET CurrentDoorState');
+    const currentState = this.loadStateForId(this.accessory.UUID);
 
-    this.platform.log.debug('Set Characteristic On ->', value);
+    return currentState;
+  }
+  handleTargetDoorStateGet() {
+    this.platform.log.debug('Triggered GET TargetDoorState');
+    const currentState = this.loadStateForId(this.accessory.UUID);
+
+    return currentState;
   }
 
-  /**
-   * Handle the "GET" requests from HomeKit
-   * These are sent when HomeKit wants to know the current state of the accessory, for example, checking if a Light bulb is on.
-   *
-   * GET requests should return as fast as possible. A long delay here will result in
-   * HomeKit being unresponsive and a bad user experience in general.
-   *
-   * If your device takes time to respond you should update the status of your device
-   * asynchronously instead using the `updateCharacteristic` method instead.
+  async handleTargetDoorStateSet(value: any) {
+    this.platform.log.debug('Triggered Set TargetDoorState');
 
-   * @example
-   * this.service.updateCharacteristic(this.platform.Characteristic.On, true)
-   */
-  async getOn(): Promise<CharacteristicValue> {
-    // implement your own code to check if the device is on
-    const isOn = this.exampleStates.On;
+    if(value == 0){
+      // Handling the Opening of the door
+      this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, 2);
+      //Gliderol State 1 is Open. Homekit State 0 is Open.
+      //Gliderol     HOMEKIT
+      //OPEN = 1     OPEN = 0
+      //CLOSED = 0   CLOSED = 1 
+      if(await this.commandGliderol(1)){
+        this.saveStateForId(this.accessory.UUID, 0)
+        await new Promise(resolve => setTimeout(resolve, 15000));
+        this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, 0);
+      }
+      else{
+        this.saveStateForId(this.accessory.UUID, 1)
+        this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, 1);
+      }
+      
+      
+    }
+    else if(value == 1){
+      this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, 3);
+      //Gliderol State 0 is Closed. Homekit State 1 is Closed.
+      if(await this.commandGliderol(0)){
+        this.saveStateForId(this.accessory.UUID, 1)
+        await new Promise(resolve => setTimeout(resolve, 15000));
+        this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, 1);
 
-    this.platform.log.debug('Get Characteristic On ->', isOn);
-
-    // if you need to return an error to show the device as "Not Responding" in the Home app:
-    // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
-
-    return isOn;
+      }
+      else{
+        this.saveStateForId(this.accessory.UUID, 0)
+        this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, 0);
+      }
+      
+    }
   }
 
-  /**
-   * Handle "SET" requests from HomeKit
-   * These are sent when the user changes the state of an accessory, for example, changing the Brightness
-   */
-  async setBrightness(value: CharacteristicValue) {
-    // implement your own code to set the brightness
-    this.exampleStates.Brightness = value as number;
+  handleObstructionDetectedGet() {
+    this.platform.log.debug('Triggered GET ObstructionDetected');
 
-    this.platform.log.debug('Set Characteristic Brightness -> ', value);
+    // set this to a valid value for ObstructionDetected
+    const currentValue = 0;
+
+    return currentValue;
   }
+
+  async commandGliderol(state: number){
+
+    let data = JSON.stringify({
+      "state": state
+    });
+
+    let axiosConfig = {
+      method: 'post',
+      url: `${this.platform.config.base_url}/prod/API/${this.platform.config.mobile_number.replace("+","")}/${this.accessory.context.device.id}/CONTROL/?appName=gliderol`,
+      headers: { 
+        'Authorization': this.platform.config.api_key, 
+        'User-Agent': 'gliderol/1 CFNetwork/1496.0.7 Darwin/23.5.0', 
+        'Content-Type': 'application/json'
+      },
+      data : data
+    };
+
+    var response = await axios.request(axiosConfig)
+
+    if(response.status == 200 && response.data.ok){
+      return true
+    }
+    else{
+      this.platform.log.error(`Error talking to Gliderol....${response}`)
+      return false
+    }
+
+
+
+  }
+
+  loadStateForId(id: String) {
+		try {
+			const data = fs.readFileSync(this.filePath, 'utf8');
+			const lines = data.split('\n');
+
+			for (const line of lines) {
+				const [fileId, value] = line.split(',').map(item => item.trim());
+				if (fileId === id) {
+					return value;
+				}
+			}
+
+			// If ID not found, return null or any default value as needed
+			return 0;
+		} catch (err: any) {
+			if(err.code == "ENOENT"){
+				console.log("No State file exists.")
+				return 0;
+			}
+			else{
+				console.error('Error loading state for ID from file:', err);
+				return 0;
+			}
+			
+		}
+	}
+
+  ensureFileOrFolderExists(filePath: any) {
+		const folderPath = filePath.substring(0, filePath.lastIndexOf('/'));
+
+		if (!fs.existsSync(folderPath)) {
+			fs.mkdirSync(folderPath, { recursive: true });
+		}
+
+		if (!fs.existsSync(filePath)) {
+			fs.writeFileSync(filePath, '', 'utf8');
+		}
+	}
+
+  saveStateForId(id: String, value: Number) {
+		try {
+			// Ensure that the file or folder exists
+			this.ensureFileOrFolderExists(this.filePath);
+	
+			// Read existing file content
+			let data = fs.readFileSync(this.filePath, 'utf8');
+			const lines = data.split('\n');
+	
+			// Update value for the specified ID or add it if not present
+			let found = false;
+			for (let i = 0; i < lines.length; i++) {
+				const [fileId, _] = lines[i].split(',').map(item => item.trim());
+				if (fileId === id) {
+					lines[i] = `${id}, ${value}`;
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				lines.push(`${id}, ${value}`);
+			}
+	
+			// Save updated content back to the file
+			data = lines.join('\n');
+			fs.writeFileSync(this.filePath, data, 'utf8');
+		} catch (err) {
+			console.error('Error saving state for ID to file:', err);
+		}
+	}
 
 }
