@@ -2,7 +2,7 @@ import { API, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig,
 
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 import { HomebridgeGliderolAccessory } from './platformAccessory.js';
-import axios, { AxiosResponse, AxiosRequestConfig, RawAxiosRequestHeaders } from 'axios';
+import axios from 'axios';
 
 
 /**
@@ -45,50 +45,48 @@ export class HomebridgeGliderol implements DynamicPlatformPlugin {
 
   async getGliderolDevices(){
 
-    let axiosConfig = {
+    const axiosConfig = {
       method: 'get',
-      url: `${this.config.base_url}/prod/API/${this.config.mobile_number.replace('+','')}/all?appName=gliderol`,
-      headers: { 
-        'Accept': 'application/json', 
-        'Content-Type': 'application/json',  
-        'Authorization': this.config.api_key,  
-        'User-Agent': 'gliderol/1 CFNetwork/1496.0.7 Darwin/23.5.0'
-      }
+      url: `${this.config.base_url}/prod/API/${this.config.mobile_number.replace('+', '')}/all?appName=gliderol`,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': this.config.api_key,
+        'User-Agent': 'gliderol/1 CFNetwork/1496.0.7 Darwin/23.5.0',
+      },
     };
-    
-    var response = await axios.request(axiosConfig)
 
-    if(response.status == 200 && response.data.ok){
-      var deviceList = []
-      for(var device of response.data.deviceList){
+    const response = await axios.request(axiosConfig);
+    const deviceList: { id: string; name: string; online: string; outletType: string}[] = [];
+    if(response.status === 200 && response.data.ok){
+      for(const device of response.data.deviceList){
         deviceList.push({
           id: device.id,
           name: device.name,
           online: device.online,
           outletType: device.outletType,
-        })
+        });
       }
 
-      return deviceList
-    }
-    else{
-      this.log.error(`Error getting list of devices ${response.status}`)
-      return deviceList
+      return deviceList;
+    } else{
+      this.log.error(`Error getting list of devices ${response.status}`);
+      return deviceList;
     }
 
   }
 
   async discoverDevices() {
 
-    var devices = await this.getGliderolDevices() ?? []
-    
+    const devices = await this.getGliderolDevices() ?? [];
+
     // loop over the discovered devices and register each one if it has not already been registered
     for (const device of devices) {
 
       // generate a unique id for the accessory this should be generated from
       // something globally unique, but constant, for example, the device serial
       // number or MAC address
-      const uuid = this.api.hap.uuid.generate(device.id); 
+      const uuid = this.api.hap.uuid.generate(device.id);
 
       // see if an accessory with the same uuid has already been registered and restored from
       // the cached devices we stored in the `configureAccessory` method above
@@ -96,7 +94,6 @@ export class HomebridgeGliderol implements DynamicPlatformPlugin {
       if (existingAccessory) {
         // the accessory already exists
         this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName);
-        
 
         // if you need to update the accessory.context then you should run `api.updatePlatformAccessories`. e.g.:
         // existingAccessory.context.device = device;

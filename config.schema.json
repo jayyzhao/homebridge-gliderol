@@ -6,13 +6,14 @@
     "type": "object",
     "properties": {
       "base_url": { "type": "string" },
-      "mobile_number": { "type": "string" }
+      "mobile_number": { "type": "string" },
+      "api_key": { "type": "string" }
     },
-    "required": [ "base_url" ]
+    "required": [ "base_url", "mobile_number", "api_key"]
   },
   "layout": [
-    { "key": "base_url", "title": "Base URL", "placeholder": "https://n0ugozxnae.execute-api.ap-northeast-1.amazonaws.com/" },
+    { "key": "base_url", "title": "Base URL", "placeholder": "https://n0ugozxnae.execute-api.ap-northeast-1.amazonaws.com" },
     { "key": "mobile_number", "title": "Mobile Number", "placeholder": "+610400000000" },
-    { "key": "api_key", "title": "API Key", "placeholder": "+61400000000" }
+    { "key": "api_key", "title": "API Key", "placeholder": "API Key from Gliderol App" }
   ]
 }

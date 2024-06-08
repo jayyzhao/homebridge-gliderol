@@ -1,10 +1,10 @@
-import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
+import { Service, PlatformAccessory } from 'homebridge';
 
 import { HomebridgeGliderol } from './platform.js';
 
 import * as fs from 'fs';
 
-import axios, { AxiosResponse, AxiosRequestConfig, RawAxiosRequestHeaders } from 'axios';
+import axios from 'axios';
 
 /**
  * Platform Accessory
@@ -19,7 +19,7 @@ export class HomebridgeGliderolAccessory {
    * You should implement your own code to track the state of your accessory
    */
 
-  private filePath = 'files/states.txt'
+  private filePath = 'files/states.txt';
 
   constructor(
     private readonly platform: HomebridgeGliderol,
@@ -32,17 +32,19 @@ export class HomebridgeGliderolAccessory {
       .setCharacteristic(this.platform.Characteristic.Model, accessory.context.device.outletType)
       .setCharacteristic(this.platform.Characteristic.SerialNumber, accessory.context.device.id);
 
-    this.service = this.accessory.getService(this.platform.Service.GarageDoorOpener) || this.accessory.addService(this.platform.Service.GarageDoorOpener);
+    this.service = this.accessory.getService(
+      this.platform.Service.GarageDoorOpener) || this.accessory.addService(this.platform.Service.GarageDoorOpener,
+    );
 
     this.service.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name);
-    
+
     const currentState = this.loadStateForId(accessory.UUID);
-    this.platform.log(`Loading the cached state for ${accessory.UUID} - State ${currentState}`)
+    this.platform.log(`Loading the cached state for ${accessory.UUID} - State ${currentState}`);
 
 
     this.service.getCharacteristic(this.platform.Characteristic.CurrentDoorState)
       .onGet(this.handleCurrentDoorStateGet.bind(this));
-    
+
     this.service.getCharacteristic(this.platform.Characteristic.TargetDoorState)
       .onGet(this.handleTargetDoorStateGet.bind(this))
       .onSet(this.handleTargetDoorStateSet.bind(this));
@@ -53,59 +55,60 @@ export class HomebridgeGliderolAccessory {
   }
 
   handleCurrentDoorStateGet() {
-    this.platform.log.debug('Triggered GET CurrentDoorState');
+    this.platform.log.info('Triggered GET CurrentDoorState');
     const currentState = this.loadStateForId(this.accessory.UUID);
 
     return currentState;
   }
+
   handleTargetDoorStateGet() {
-    this.platform.log.debug('Triggered GET TargetDoorState');
+    this.platform.log.info('Triggered GET TargetDoorState');
     const currentState = this.loadStateForId(this.accessory.UUID);
 
     return currentState;
   }
 
   async handleTargetDoorStateSet(value: any) {
-    this.platform.log.debug('Triggered Set TargetDoorState');
+    this.platform.log.info('Triggered Set TargetDoorState - ' + {value});
 
-    if(value == 0){
+    if(value === 0){
       // Handling the Opening of the door
-      this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, 2);
+      this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, this.platform.Characteristic.CurrentDoorState.OPENING);
       //Gliderol State 1 is Open. Homekit State 0 is Open.
       //Gliderol     HOMEKIT
       //OPEN = 1     OPEN = 0
-      //CLOSED = 0   CLOSED = 1 
+      //CLOSED = 0   CLOSED = 1
       if(await this.commandGliderol(1)){
-        this.saveStateForId(this.accessory.UUID, 0)
+        this.platform.log.info('Waiting.....');
         await new Promise(resolve => setTimeout(resolve, 15000));
-        this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, 0);
+        this.platform.log.info('Wait Completed. State Set.....');
+        this.saveStateForId(this.accessory.UUID, 0);
+        this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, this.platform.Characteristic.CurrentDoorState.OPEN);
+      } else{
+        this.saveStateForId(this.accessory.UUID, 1);
+        this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, this.platform.Characteristic.CurrentDoorState.CLOSED);
       }
-      else{
-        this.saveStateForId(this.accessory.UUID, 1)
-        this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, 1);
-      }
-      
-      
-    }
-    else if(value == 1){
-      this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, 3);
+
+    } else if(value === 1){
+      this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, this.platform.Characteristic.CurrentDoorState.CLOSING);
       //Gliderol State 0 is Closed. Homekit State 1 is Closed.
       if(await this.commandGliderol(0)){
-        this.saveStateForId(this.accessory.UUID, 1)
+        this.platform.log.info('Waiting.....');
         await new Promise(resolve => setTimeout(resolve, 15000));
-        this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, 1);
+        this.platform.log.info('Wait Completed. State Set.....');
+        this.saveStateForId(this.accessory.UUID, 1);
+        this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, this.platform.Characteristic.CurrentDoorState.CLOSED);
 
+      } else{
+        this.saveStateForId(this.accessory.UUID, 0);
+        this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, this.platform.Characteristic.CurrentDoorState.OPEN);
       }
-      else{
-        this.saveStateForId(this.accessory.UUID, 0)
-        this.service.setCharacteristic(this.platform.Characteristic.CurrentDoorState, 0);
-      }
-      
+
     }
   }
 
   handleObstructionDetectedGet() {
-    this.platform.log.debug('Triggered GET ObstructionDetected');
+    this.platform.log.info('Triggered GET ObstructionDetected');
 
     // set this to a valid value for ObstructionDetected
     const currentValue = 0;
@@ -115,103 +118,95 @@ export class HomebridgeGliderolAccessory {
 
   async commandGliderol(state: number){
 
-    let data = JSON.stringify({
-      "state": state
+    const data = JSON.stringify({
+      'state': state,
     });
 
-    let axiosConfig = {
+    const axiosConfig = {
       method: 'post',
-      url: `${this.platform.config.base_url}/prod/API/${this.platform.config.mobile_number.replace("+","")}/${this.accessory.context.device.id}/CONTROL/?appName=gliderol`,
-      headers: { 
-        'Authorization': this.platform.config.api_key, 
-        'User-Agent': 'gliderol/1 CFNetwork/1496.0.7 Darwin/23.5.0', 
-        'Content-Type': 'application/json'
+      url: `
+        ${this.platform.config.base_url}/prod/API/${this.platform.config.mobile_number.replace('+', '')}/${this.accessory.context.device.id}/CONTROL/?appName=gliderol`,
+      headers: {
+        'Authorization': this.platform.config.api_key,
+        'User-Agent': 'gliderol/1 CFNetwork/1496.0.7 Darwin/23.5.0',
+        'Content-Type': 'application/json',
       },
-      data : data
+      data : data,
     };
 
-    var response = await axios.request(axiosConfig)
+    const response = await axios.request(axiosConfig);
 
-    if(response.status == 200 && response.data.ok){
-      return true
+    if(response.status === 200 && response.data.ok){
+      return true;
+    } else{
+      this.platform.log.error(`Error talking to Gliderol....${response}`);
+      return false;
     }
-    else{
-      this.platform.log.error(`Error talking to Gliderol....${response}`)
-      return false
-    }
-
-
 
   }
 
-  loadStateForId(id: String) {
-		try {
-			const data = fs.readFileSync(this.filePath, 'utf8');
-			const lines = data.split('\n');
+  loadStateForId(id: string) {
+    try {
+      const data = fs.readFileSync(this.filePath, 'utf8');
+      const lines = data.split('\n');
+      for (const line of lines) {
+        const [fileId, value] = line.split(',').map(item => item.trim());
+        if (fileId === id) {
+          return value;
+        }
+      }
+      // If ID not found, return null or any default value as needed
+      return 1;
+    } catch (err: any) {
+      if(err.code === 'ENOENT'){
+        this.platform.log.info('No State file exists');
+        return 1;
+      } else{
+        this.platform.log.error('Error loading state for ID from file:', err);
+        return 1;
+      }
+    }
+  }
 
-			for (const line of lines) {
-				const [fileId, value] = line.split(',').map(item => item.trim());
-				if (fileId === id) {
-					return value;
-				}
-			}
+  ensureFileOrFolderExists(filePath: string) {
+    const folderPath = filePath.substring(0, filePath.lastIndexOf('/'));
 
-			// If ID not found, return null or any default value as needed
-			return 0;
-		} catch (err: any) {
-			if(err.code == "ENOENT"){
-				console.log("No State file exists.")
-				return 0;
-			}
-			else{
-				console.error('Error loading state for ID from file:', err);
-				return 0;
-			}
-			
-		}
-	}
+    if (!fs.existsSync(folderPath)) {
+      fs.mkdirSync(folderPath, { recursive: true });
+    }
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, '', 'utf8');
+    }
+  }
 
-  ensureFileOrFolderExists(filePath: any) {
-		const folderPath = filePath.substring(0, filePath.lastIndexOf('/'));
+  saveStateForId(id: string, value: number) {
+    try {
+      // Ensure that the file or folder exists
+      this.ensureFileOrFolderExists(this.filePath);
+      // Read existing file content
+      let data = fs.readFileSync(this.filePath, 'utf8');
+      const lines = data.split('\n');
+      // Update value for the specified ID or add it if not present
+      let found = false;
+      for (let i = 0; i < lines.length; i++) {
+        const [fileId, _] = lines[i].split(',').map(item => item.trim());
+        this.platform.log.debug(_);
+        if (fileId === id) {
+          lines[i] = `${id}, ${value}`;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        lines.push(`${id}, ${value}`);
+      }
 
-		if (!fs.existsSync(folderPath)) {
-			fs.mkdirSync(folderPath, { recursive: true });
-		}
-
-		if (!fs.existsSync(filePath)) {
-			fs.writeFileSync(filePath, '', 'utf8');
-		}
-	}
-
-  saveStateForId(id: String, value: Number) {
-		try {
-			// Ensure that the file or folder exists
-			this.ensureFileOrFolderExists(this.filePath);
-	
-			// Read existing file content
-			let data = fs.readFileSync(this.filePath, 'utf8');
-			const lines = data.split('\n');
-	
-			// Update value for the specified ID or add it if not present
-			let found = false;
-			for (let i = 0; i < lines.length; i++) {
-				const [fileId, _] = lines[i].split(',').map(item => item.trim());
-				if (fileId === id) {
-					lines[i] = `${id}, ${value}`;
-					found = true;
-					break;
-				}
-			}
-			if (!found) {
-				lines.push(`${id}, ${value}`);
-			}
-	
-			// Save updated content back to the file
-			data = lines.join('\n');
-			fs.writeFileSync(this.filePath, data, 'utf8');
-		} catch (err) {
-			console.error('Error saving state for ID to file:', err);
-		}
-	}
+      // Save updated content back to the file
+      data = lines.join('\n');
+      fs.writeFileSync(this.filePath, data, 'utf8');
+    } catch (err) {
+      this.platform.log.error('Error saving state for ID to file:', err);
+    }
+  }
 
 }

@@ -20,5 +20,5 @@
     "eslint.config.mjs",
     "homebridge-ui",
     "src"
-  ]
+  ],
 }
